@@ -1,10 +1,15 @@
 const express = require("express");
 const routes = require("./routes");
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
+app.use(cors({
+  origin: '*'
+}))
 app.use("/", routes);
 
 // Consistent JSON response for malformed JSON and unexpected errors.

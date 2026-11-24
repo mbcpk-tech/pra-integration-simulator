@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRA / FBR API Tester</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f3f5f9; color: #172033; }
+    .wrap { max-width: 1100px; margin: 36px auto; padding: 0 18px; }
+    header { margin-bottom: 22px; }
+    h1 { margin: 0 0 7px; font-size: 27px; }
+    .sub { color: #647089; margin: 0; }
+    .panel { background: white; border: 1px solid #e2e7f0; border-radius: 14px; padding: 22px; margin-bottom: 18px; box-shadow: 0 5px 20px #1d2b4410; }
+    h2 { font-size: 16px; margin: 0 0 16px; color: #172033; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    label { font-size: 13px; font-weight: 650; color: #3b465c; }
+    input, select { width: 100%; border: 1px solid #ccd4e1; border-radius: 8px; padding: 11px 12px; font: inherit; color: #172033; background: white; }
+    input:focus, select:focus { outline: 3px solid #dce8ff; border-color: #477de0; }
+    input:disabled { background: #f5f7fb; color: #9aa3b4; cursor: not-allowed; }
+    .hint { color: #778198; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 15px; }
+    .full { grid-column: 1 / -1; }
+    .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+    button { border: 0; border-radius: 8px; padding: 11px 17px; font: inherit; font-weight: 650; cursor: pointer; }
+    #send { background: #245fce; color: white; }
+    #send:disabled { opacity: .6; cursor: wait; }
+    #reset { background: #edf1f7; color: #35415a; }
+    .status { color: #647089; font-size: 13px; }
+
+    /* Route selector tabs */
+    .route-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .route-tab { border: 1px solid #ccd4e1; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; background: white; color: #536078; transition: all .15s; }
+    .route-tab:hover { border-color: #477de0; color: #245fce; }
+    .route-tab.active { background: #245fce; color: white; border-color: #245fce; }
+    .method-get { --mc: #0a7c3e; }
+    .method-post { --mc: #9a3f06; }
+    .route-tab .method { font-size: 11px; font-weight: 700; color: var(--mc); display: inline-block; margin-right: 5px; }
+    .route-tab.active .method { color: rgba(255,255,255,.8); }
+
+    /* Route description */
+    .route-desc { font-size: 13px; color: #536078; background: #f5f7fb; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; border-left: 3px solid #477de0; }
+    .route-desc code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background: #e8edf5; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+
+    /* Section visibility */
+    .section { display: none; }
+    .section.visible { display: block; }
+
+    /* Response area */
+    pre { margin: 0; padding: 16px; border-radius: 9px; background: #101827; color: #d9e5f7; overflow: auto; min-height: 130px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .response-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .pill { font-size: 12px; border-radius: 99px; padding: 5px 9px; background: #edf1f7; color: #536078; }
+    .pill.ok { background: #e4f7ec; color: #167342; }
+    .pill.bad { background: #ffebeb; color: #b42318; }
+
+    /* Request preview */
+    .req-preview { font-size: 12px; color: #778198; background: #f5f7fb; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; display: none; }
+    .req-preview.visible { display: block; }
+
+    @media (max-width: 650px) {
+      .grid { grid-template-columns: 1fr; }
+      .full { grid-column: auto; }
+      .panel { padding: 17px; }
+      .route-tabs { gap: 6px; }
+      .route-tab { font-size: 12px; padding: 7px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>PRA / FBR API Tester</h1>
+      <p class="sub">Test all four simulator endpoints — select a route, review the pre-filled demo data, and send.</p>
+    </header>
+
+    <!-- API Base URL (shared across all requests) -->
+    <section class="panel">
+      <h2>API Configuration</h2>
+      <div class="field">
+        <label for="baseUrl">API Base URL</label>
+        <input id="baseUrl" type="url" placeholder="https://your-project.vercel.app" required>
+        <span class="hint">Do not add the endpoint path here — the tester appends it automatically.</span>
+      </div>
+    </section>
+
+    <!-- Route selector -->
+    <section class="panel">
+      <h2>Select Endpoint</h2>
+      <div class="route-tabs">
+        <button type="button" class="route-tab method-get active" data-route="health">
+          <span class="method">GET</span>/health
+        </button>
+        <button type="button" class="route-tab method-post" data-route="sale">
+          <span class="method">POST</span>/api/v1/sale
+        </button>
+        <button type="button" class="route-tab method-get" data-route="verify">
+          <span class="method">GET</span>/api/v1/verify/:unique_code
+        </button>
+        <button type="button" class="route-tab method-get" data-route="transaction">
+          <span class="method">GET</span>/api/v1/transaction/:transaction_id
+        </button>
+      </div>
+
+      <div id="routeDesc" class="route-desc"></div>
+
+      <!-- Health (no inputs needed) -->
+      <div id="section-health" class="section visible">
+        <p class="hint" style="margin:0">No parameters required. Sends a <code>GET /health</code> request and checks database connectivity.</p>
+      </div>
+
+      <!-- POST /api/v1/sale -->
+      <div id="section-sale" class="section">
+        <div class="grid">
+          <div class="field">
+            <label for="POSTID">POSTID</label>
+            <input id="POSTID" value="POS-001">
+            <span class="hint">Point-of-sale terminal identifier</span>
+          </div>
+          <div class="field">
+            <label for="USIN">USIN</label>
+            <input id="USIN" placeholder="Generated automatically">
+            <span class="hint">Unique sale invoice number</span>
+          </div>
+          <div class="field">
+            <label for="DateTime">DateTime</label>
+            <input id="DateTime" type="datetime-local">
+          </div>
+          <div class="field">
+            <label for="PaymentMode">PaymentMode</label>
+            <select id="PaymentMode">
+              <option value="1">1 — Cash</option>
+              <option value="2">2 — Card</option>
+              <option value="3">3 — Cheque</option>
+              <option value="4">4 — Gift Voucher</option>
+              <option value="5">5 — Loyalty Points</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="TotalSaleValue">TotalSaleValue</label>
+            <input id="TotalSaleValue" type="number" step="0.01" min="0" value="1000.00">
+          </div>
+          <div class="field">
+            <label for="TotalTaxCharged">TotalTaxCharged (16%)</label>
+            <input id="TotalTaxCharged" type="number" step="0.01" min="0" value="160.00">
+          </div>
+          <div class="field">
+            <label for="Discount">Discount <span style="font-weight:400;color:#778198">(optional)</span></label>
+            <input id="Discount" type="number" step="0.01" min="0" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="BuyerName">BuyerName <span style="font-weight:400;color:#778198">(optional)</span></label>
+            <input id="BuyerName" placeholder="e.g. Ahmed Khan">
+          </div>
+          <div class="field">
+            <label for="BuyerPNTN_CNIC">BuyerPNTN_CNIC <span style="font-weight:400;color:#778198">(optional)</span></label>
+            <input id="BuyerPNTN_CNIC" placeholder="e.g. 42101-1234567-1">
+          </div>
+          <div class="field">
+            <label for="RefUSIN">RefUSIN <span style="font-weight:400;color:#778198">(optional)</span></label>
+            <input id="RefUSIN" placeholder="Reference USIN for returns/adjustments">
+          </div>
+        </div>
+      </div>
+
+      <!-- GET /api/v1/verify/:unique_code -->
+      <div id="section-verify" class="section">
+        <div class="field">
+          <label for="uniqueCode">Unique Code</label>
+          <input id="uniqueCode" placeholder="e.g. PRA-20241124-A1B2C3D4E5">
+          <span class="hint">The <code>unique_code</code> returned from a successful sale. Format: <code>PRA-YYYYMMDD-XXXXXXXXXX</code></span>
+        </div>
+        <p class="hint" style="margin:4px 0 0">
+          Tip: submit a sale first, copy the <code>unique_code</code> from the response, then switch to this tab.
+        </p>
+      </div>
+
+      <!-- GET /api/v1/transaction/:transaction_id -->
+      <div id="section-transaction" class="section">
+        <div class="field">
+          <label for="transactionId">Transaction ID</label>
+          <input id="transactionId" placeholder="e.g. 3F9A2B1C0D4E5F6A7B8C9D0E1F2A3B4C">
+          <span class="hint">The 32-character hex <code>transaction_id</code> returned from a successful sale.</span>
+        </div>
+        <p class="hint" style="margin:4px 0 0">
+          Tip: submit a sale first, copy the <code>transaction_id</code> from the response, then switch to this tab.
+        </p>
+      </div>
+
+      <div class="req-preview" id="reqPreview"></div>
+
+      <div class="actions">
+        <button id="send" type="button">Send Request</button>
+        <button id="reset" type="button">Reset Fields</button>
+        <span class="status" id="requestStatus" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <!-- Response panel -->
+    <section class="panel">
+      <div class="response-head">
+        <h2 style="margin:0">API Response</h2>
+        <span id="responsePill" class="pill">Waiting for request</span>
+      </div>
+      <pre id="response">The API response will appear here.</pre>
+    </section>
+  </main>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────────────────
+    let currentRoute = 'health';
+
+    const routeMeta = {
+      health: {
+        method: 'GET',
+        path: '/health',
+        desc: 'Health check — verifies the API server is running and the database is reachable. No request body.'
+      },
+      sale: {
+        method: 'POST',
+        path: '/api/v1/sale',
+        desc: 'Submit a sale invoice. Returns a <code>transaction_id</code>, a <code>unique_code</code>, and a Base64 QR code PNG on success.'
+      },
+      verify: {
+        method: 'GET',
+        path: '/api/v1/verify/:unique_code',
+        desc: 'Verify a transaction by its <code>unique_code</code> (the authority verification code returned on sale).'
+      },
+      transaction: {
+        method: 'GET',
+        path: '/api/v1/transaction/:transaction_id',
+        desc: 'Look up the full stored transaction record by its <code>transaction_id</code>. Response includes a regenerated QR PNG.'
+      }
+    };
+
+    // ── DOM refs ───────────────────────────────────────────────────────────
+    const sendBtn       = document.getElementById('send');
+    const resetBtn      = document.getElementById('reset');
+    const responseBox   = document.getElementById('response');
+    const responsePill  = document.getElementById('responsePill');
+    const requestStatus = document.getElementById('requestStatus');
+    const routeDesc     = document.getElementById('routeDesc');
+    const reqPreview    = document.getElementById('reqPreview');
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function val(id) {
+      return document.getElementById(id)?.value.trim() ?? '';
+    }
+
+    function baseUrl() {
+      return val('baseUrl').replace(/\/+$/, '');
+    }
+
+    function freshUSIN() {
+      return 'MB-' + Date.now();
+    }
+
+    function localNow() {
+      const now = new Date();
+      return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 16);
+    }
+
+    function showResponse(data, isOk) {
+      responseBox.textContent = typeof data === 'string'
+        ? data
+        : JSON.stringify(data, null, 2);
+      responsePill.textContent = isOk ? 'Request completed' : 'Request failed';
+      responsePill.className = 'pill ' + (isOk ? 'ok' : 'bad');
+    }
+
+    function updatePreview() {
+      const meta = routeMeta[currentRoute];
+      if (!meta) return;
+      let line = `${meta.method}  ${baseUrl() || '<base-url>'}`;
+      if (currentRoute === 'verify') {
+        const uc = val('uniqueCode');
+        line += `/api/v1/verify/${uc || ':unique_code'}`;
+      } else if (currentRoute === 'transaction') {
+        const tid = val('transactionId');
+        line += `/api/v1/transaction/${tid || ':transaction_id'}`;
+      } else if (currentRoute === 'health') {
+        line += '/health';
+      } else {
+        line += '/api/v1/sale  (JSON body)';
+      }
+      reqPreview.textContent = line;
+      reqPreview.classList.add('visible');
+    }
+
+    // ── Route switching ────────────────────────────────────────────────────
+    function switchRoute(route) {
+      currentRoute = route;
+
+      // Update tabs
+      document.querySelectorAll('.route-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.route === route);
+      });
+
+      // Show/hide sections
+      document.querySelectorAll('.section').forEach(s => {
+        s.classList.remove('visible');
+      });
+      document.getElementById('section-' + route)?.classList.add('visible');
+
+      // Update description
+      const meta = routeMeta[route];
+      routeDesc.innerHTML = `<strong>${meta.method}</strong>&nbsp; <code>${meta.path}</code> &nbsp;—&nbsp; ${meta.desc}`;
+
+      // Update button label
+      sendBtn.textContent = meta.method === 'POST' ? 'Send Sale Request' : 'Send Request';
+
+      updatePreview();
+    }
+
+    document.querySelectorAll('.route-tab').forEach(tab => {
+      tab.addEventListener('click', () => switchRoute(tab.dataset.route));
+    });
+
+    // ── Build & send request ───────────────────────────────────────────────
+    sendBtn.addEventListener('click', async () => {
+      const url = baseUrl();
+      if (!url) {
+        requestStatus.textContent = 'Please enter the API Base URL first';
+        return;
+      }
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending…';
+      requestStatus.textContent = '';
+      responsePill.textContent = 'Request in progress';
+      responsePill.className = 'pill';
+      responseBox.textContent = 'Waiting for API response…';
+
+      try {
+        let response;
+
+        if (currentRoute === 'health') {
+          requestStatus.textContent = 'GET /health';
+          response = await fetch(url + '/health');
+
+        } else if (currentRoute === 'sale') {
+          const payload = {
+            POSTID:          val('POSTID'),
+            USIN:            val('USIN'),
+            DateTime:        val('DateTime'),
+            TotalSaleValue:  Number(val('TotalSaleValue')),
+            TotalTaxCharged: Number(val('TotalTaxCharged')),
+            PaymentMode:     val('PaymentMode')   // kept as string — matches API validation
+          };
+          if (val('Discount') !== '')       payload.Discount       = Number(val('Discount'));
+          if (val('BuyerName') !== '')      payload.BuyerName      = val('BuyerName');
+          if (val('BuyerPNTN_CNIC') !== '') payload.BuyerPNTN_CNIC = val('BuyerPNTN_CNIC');
+          if (val('RefUSIN') !== '')        payload.RefUSIN        = val('RefUSIN');
+
+          requestStatus.textContent = 'POST /api/v1/sale';
+          response = await fetch(url + '/api/v1/sale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+        } else if (currentRoute === 'verify') {
+          const code = val('uniqueCode');
+          if (!code) { alert('Please enter a Unique Code.'); return; }
+          requestStatus.textContent = `GET /api/v1/verify/${code}`;
+          response = await fetch(url + '/api/v1/verify/' + encodeURIComponent(code));
+
+        } else if (currentRoute === 'transaction') {
+          const tid = val('transactionId');
+          if (!tid) { alert('Please enter a Transaction ID.'); return; }
+          requestStatus.textContent = `GET /api/v1/transaction/${tid}`;
+          response = await fetch(url + '/api/v1/transaction/' + encodeURIComponent(tid));
+        }
+
+        const rawText = await response.text();
+        let result;
+        try { result = JSON.parse(rawText); } catch { result = rawText; }
+
+        showResponse({ http_status: response.status, http_ok: response.ok, response: result }, response.ok);
+        requestStatus.textContent = `HTTP ${response.status}`;
+
+      } catch (error) {
+        showResponse({
+          error: error.message,
+          hint: 'If this is a CORS error, enable CORS on the API server and redeploy. Also verify the base URL.'
+        }, false);
+        requestStatus.textContent = 'Could not reach the API';
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = routeMeta[currentRoute].method === 'POST' ? 'Send Sale Request' : 'Send Request';
+      }
+    });
+
+    // ── Reset ──────────────────────────────────────────────────────────────
+    resetBtn.addEventListener('click', () => {
+      if (currentRoute === 'sale') {
+        document.getElementById('POSTID').value          = 'POS-001';
+        document.getElementById('USIN').value            = freshUSIN();
+        document.getElementById('DateTime').value        = localNow();
+        document.getElementById('PaymentMode').value     = '1';
+        document.getElementById('TotalSaleValue').value  = '1000.00';
+        document.getElementById('TotalTaxCharged').value = '160.00';
+        document.getElementById('Discount').value        = '';
+        document.getElementById('BuyerName').value       = '';
+        document.getElementById('BuyerPNTN_CNIC').value  = '';
+        document.getElementById('RefUSIN').value         = '';
+      } else if (currentRoute === 'verify') {
+        document.getElementById('uniqueCode').value = '';
+      } else if (currentRoute === 'transaction') {
+        document.getElementById('transactionId').value = '';
+      }
+      responseBox.textContent   = 'The API response will appear here.';
+      responsePill.textContent  = 'Waiting for request';
+      responsePill.className    = 'pill';
+      requestStatus.textContent = '';
+      updatePreview();
+    });
+
+    // ── Live preview update ────────────────────────────────────────────────
+    document.getElementById('baseUrl').addEventListener('input', updatePreview);
+    document.getElementById('uniqueCode')?.addEventListener('input', updatePreview);
+    document.getElementById('transactionId')?.addEventListener('input', updatePreview);
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    document.getElementById('DateTime').value = localNow();
+    document.getElementById('USIN').value     = freshUSIN();
+    switchRoute('health');
+  </script>
+</body>
+</html>
